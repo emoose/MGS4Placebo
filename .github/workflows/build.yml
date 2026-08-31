@@ -1,0 +1,45 @@
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        arch: [ Win32 ]
+        build_type: [ Release ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: |
+          mkdir build
+          cd build
+          cmake -G "Visual Studio 17 2022" -A ${{matrix.arch}} ..
+          
+      - name: Add older VC2022 redist workaround to safetyhook
+        shell: pwsh
+        run: |
+          (Get-Content build/_deps/safetyhook-build/src/safetyhook.vcxproj) -replace 'ZYCORE_STATIC_BUILD', '_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;ZYCORE_STATIC_BUILD' | Set-Content build/_deps/safetyhook-build/safetyhook.vcxproj
+          (Get-Content build/_deps/zydis-build/Zydis.vcxproj) -replace 'ZYCORE_STATIC_BUILD', '_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;ZYCORE_STATIC_BUILD' | Set-Content build/_deps/zydis-build/Zydis.vcxproj
+          (Get-Content build/_deps/zydis-build/zycore/Zycore.vcxproj) -replace 'ZYCORE_STATIC_BUILD', '_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;ZYCORE_STATIC_BUILD' | Set-Content build/_deps/zydis-build/zycore/Zycore.vcxproj
+
+      - name: Build
+        run: |
+          cmake --build build --config ${{matrix.build_type}}
+          
+      - name: Copy settings
+        shell: pwsh
+        run: |
+          cp dist/MGS4Placebo.ini build/bin/MGS4Placebo.ini
+          
+      - name: Upload
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: mgs4placebo-${{ github.sha }}
+          path: build/bin/

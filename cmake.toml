@@ -1,0 +1,82 @@
+# Reference: https://build-cpp.github.io/cmkr/cmake-toml
+# to build:
+# > cmake -B build
+# > cmake --build build --config Release
+[project]
+name = "mgs4placebo-proj"
+cmake-after = """
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+
+set(ASMJIT_STATIC ON CACHE BOOL "" FORCE)
+
+option(ZYDIS_BUILD_TOOLS "" OFF)
+option(ZYDIS_BUILD_EXAMPLES "" OFF)
+
+if ("${CMAKE_BUILD_TYPE}" MATCHES "Release")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MT")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT")
+
+    # Statically compile runtime
+    string(REGEX REPLACE "/MD" "/MT" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    string(REGEX REPLACE "/MD" "/MT" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+    string(REGEX REPLACE "/MD" "/MT" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+    string(REGEX REPLACE "/MD" "/MT" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
+
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    message(NOTICE "Building in Release mode")
+endif()
+"""
+
+[target.spdlog]
+type = "static"
+sources = ["external/spdlog/src/*.cpp"]
+include-directories = ["external/spdlog/include"]
+compile-definitions = ["SPDLOG_COMPILED_LIB", "_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR"]
+# /utf-8: newer fmt (bundled in spdlog) #errors out on MSVC unless the source
+# and execution charsets are both UTF-8. It is a header-level check, so every
+# TU that includes spdlog needs this - see mgs4placebo below.
+compile-options = ["/utf-8"]
+
+[fetch-content.safetyhook]
+git = "https://github.com/cursey/safetyhook"
+tag = "f44cc070a8340f2f26649553c49533475417304d"
+cmake-before="""
+set(SAFETYHOOK_FETCH_ZYDIS ON)
+"""
+
+[target.mgs4placebo]
+type = "shared"
+sources = ["*.ini", "src/**.cpp", "src/**.c", "src/**.def", "src/Resource.rc",
+    "external/ModUtils/Patterns.cpp",
+]
+headers = ["src/**.hpp", "src/**.h", "external/ModUtils/Patterns.h", "external/ModUtils/MemoryMgr.h", "external/ini-cpp/ini/ini.h"]
+include-directories = ["shared/", "src/", "include/", 
+    "external/ModUtils/",
+    "external/ini-cpp/ini/"
+]
+compile-options = ["/GS-", "/bigobj", "/EHa", "/MP", "/utf-8"]
+link-options = ["/DEBUG", "/OPT:REF", "/OPT:ICF"]
+compile-features = ["cxx_std_20"]
+compile-definitions = ["_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING", "_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR", "DIRECTINPUT_VERSION=0x0800"]
+link-libraries = [
+    "spdlog",
+    "safetyhook",
+    "version.lib",
+    "xinput9_1_0.lib",
+    "Hid.lib",
+    "Winmm.lib",
+    "Setupapi.lib",
+    "Crypt32.lib"
+]
+
+[target.mgs4placebo.properties]
+OUTPUT_NAME = "mgs4placebo"
+SUFFIX = ".asi"
+RUNTIME_OUTPUT_DIRECTORY_RELEASE = "${CMAKE_BINARY_DIR}/bin/${CMKR_TARGET}"
+RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO = "${CMAKE_BINARY_DIR}/bin/${CMKR_TARGET}"
+LIBRARY_OUTPUT_DIRECTORY_RELEASE = "${CMAKE_BINARY_DIR}/lib/${CMKR_TARGET}"
+LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO = "${CMAKE_BINARY_DIR}/lib/${CMKR_TARGET}"
+ARCHIVE_OUTPUT_DIRECTORY_RELEASE = "${CMAKE_BINARY_DIR}/lib/${CMKR_TARGET}"
+ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO = "${CMAKE_BINARY_DIR}/lib/${CMKR_TARGET}"
+
