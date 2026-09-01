@@ -42,11 +42,11 @@ Patches game to let GLFW make use of raw-input, and some minor patches to game-c
 
 The raw-input code is all there in GLFW already, the game just never turns it on, so mouse input comes in through WM_MOUSEMOVE with whatever pointer accel Windows applied to it.
 
-The vanilla game felt a bit like mouse was emulating a control stick to me, and in the code it kind of is, but camera code does seem to grab the mouse delta directly at least.
+At first vanilla game felt a little bit like mouse was emulating an analog stick to me, and in the code it kind of is, but camera code does seem to grab the mouse delta directly at least.
 
 The small-movement thing is real though, the camera scales the delta by 2/3 and then truncates to an int, so a frame that only moved a pixel may get thrown away entirely. Now it keeps the remainder for the next frame.
 
-Really I'm not sure how much of a difference these hooks make though, needs more testing.
+Really I'm not sure how much of a difference these hooks make though, likely needs more testing.
 
 ### hooks_resolution.cpp
 
@@ -58,7 +58,7 @@ Crosshair reticle fixed thanks to patch from https://github.com/drbermejor/mgs4U
 
 ### hooks_shadows.cpp
 
-Allows overriding shadow map size and sample count. The game parses those out of Shadow...@<index>.<field> entries in its config, so the hook just rewrites the values after they're parsed.
+Allows overriding shadow map size and sample count. The game parses those out of Shadow entries in its .ecf config, so the hook just rewrites the values after they're parsed.
 
 # Code
 
