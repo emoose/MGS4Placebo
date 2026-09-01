@@ -12,11 +12,15 @@ Enables MSAA on any full-resolution render targets, also includes shader-patchin
 
 MGS4 is forward-rendered, so MSAA can be applied to it. (when Fox Engine was announced they made a big deal about switching over to deferred rendering)
 
-For this we just switch RTs to use bgfx's MSAA flags, and also set BGFX_STATE_MSAA so D3D would make use of it.
+For this we patch full-res RTs to have bgfx's MSAA flags, and also set BGFX_STATE_MSAA so D3D would make use of it.
 
-However bgfx also refuses to make a readable multisampled depth buffer, giving an error and bailing instead of creating it - but since shaders only read depth through R24_UNORM_X8_TYPELESS, it should be fine for a multisampled depth buffer to be used - we patch out the two checks that block it, one that won't attach multisampled depth to a framebuffer unless it's marked write-only, and one that gives up creating the texture at all after asking the driver whether D24S8 supports MSAA sampling. (leaving depth write-only without changing this would break anything that reads depth, so eg. DoF would just blur the whole screen)
+However bgfx also refuses to make a readable multisampled depth buffer, giving an error and bailing instead of creating it - but since shaders only read depth through R24_UNORM_X8_TYPELESS, it should be fine for a multisampled depth buffer to be used. (leaving depth write-only without changing this would break anything that reads depth, eg. DoF would just blur the whole screen)
 
-MSAA alone seemed to make some difference, geometry edges have far less aliasing artifacts with it, but really geometry aliasing wasn't the main issue in the game, most of the aliasing is from transparent textures like fences that MSAA couldn't affect.
+To get around it we patch out two checks in bgfx, one that won't attach multisampled depth to a framebuffer unless it's marked write-only, and one that gives up creating the texture at all after checking if D24S8 supports MSAA sampling.
+
+---
+
+With MSAA alone it made some difference to the scene, geometry edges have far less aliasing artifacts with it, but really geometry aliasing wasn't the main issue in the game, most of the aliasing is from transparent textures like fences that MSAA couldn't affect.
 
 Tried a few attempts at enabling ATOC on them, but doesn't seem it's viable, the games HDR lighting seems to overwrite most of the data ATOC would use.
 
