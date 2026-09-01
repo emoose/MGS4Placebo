@@ -10,19 +10,19 @@ Not likely to be updated, mainly releasing in hope other mods might adopt things
 
 Enables MSAA on any full-resolution render targets, also includes shader-patching code to enable multisampling on cutout textures (fences etc)
 
-MGS4 is forward-rendered, so MSAA can apply to it (when Fox Engine was announced they made a big deal about that switching to deferred rendering)
+MGS4 is forward-rendered, so MSAA can be applied to it. (when Fox Engine was announced they made a big deal about switching over to deferred rendering)
 
-Two things had to be patched before it did anything. The game never sets BGFX_STATE_MSAA so D3D was still rasterizing one sample per pixel, you'd get multisampled targets resolving from identical samples.
+For this we just switch RTs to use bgfx's MSAA flags, and also set BGFX_STATE_MSAA so D3D would make use of it.
 
-bgfx also refuses to make a readable multisampled depth buffer, partly because D3D can't resolve depth formats, partly because its format probe asks about D24S8 when shaders actually read depth through an R24_UNORM_X8_TYPELESS view. Leaving depth write-only instead breaks anything that reads depth, so DoF ended up blurring the whole screen.
+However bgfx also refuses to make a readable multisampled depth buffer, giving an error and bailing instead of creating it - but since shaders only read depth through R24_UNORM_X8_TYPELESS, it should be fine for a multisampled depth buffer to be used - we patch out the two checks that block it, one that won't attach multisampled depth to a framebuffer unless it's marked write-only, and one that gives up creating the texture at all after asking the driver whether D24S8 supports MSAA sampling. (leaving depth write-only without changing this would break anything that reads depth, so eg. DoF would just blur the whole screen)
 
-MSAA alone seemed to make some difference, geometry edges have far less aliasing artifacts with it, but really geometry aliasing wasn't the main issue in the game, most of the aliasing is from transparent textures like fences, that MSAA couldn't affect.
+MSAA alone seemed to make some difference, geometry edges have far less aliasing artifacts with it, but really geometry aliasing wasn't the main issue in the game, most of the aliasing is from transparent textures like fences that MSAA couldn't affect.
 
 Tried a few attempts at enabling ATOC on them, but doesn't seem it's viable, the games HDR lighting seems to overwrite most of the data ATOC would use.
 
-Instead I tried patching the shaders that draw the fences, switching their inputs to per-sample interpolation. That makes D3D run the shader once per MSAA sample instead of once per pixel, so the alpha test happens per sample and the cutout edges get antialiased the same as geometry. It's only a 4-bit field in an existing declaration so the shader stays the same length, only the container hash needs redoing.
+Instead tried patching the shaders that draw the fences & other transparent cut-outs, switching their inputs to per-sample interpolation. That makes D3D run the shader once per MSAA sample instead of once per pixel, so the alpha test happens per sample and the edges get antialiased the same as geometry. It's only a 4-bit field in an existing declaration so the shader stays the same length, only the container hash needs redoing.
 
-MSAA likely isn't too useful for people on gaming PCs that can run the game supersampled, but might be a help on portables and less-powerful computers.
+MSAA likely isn't too useful for those on PCs that can just run the game supersampled, but might be a help on portables and less-powerful computers.
 
 **This has only been lightly tested in some of the first areas of the game**, already had to solve one issue with DoF, so wouldn't be surprised if later parts have their own issues too.
 
@@ -34,7 +34,7 @@ The cutout patching above happens here as well.
 
 ### hooks_mouse.cpp
 
-Patches game to allow GLFW to make use of raw-input, and some minor patches to game-code that should allow smaller mouse movements to be registered.
+Patches game to let GLFW make use of raw-input, and some minor patches to game-code that should allow smaller mouse movements to be registered.
 
 The raw-input code is all there in GLFW already, the game just never turns it on, so mouse input comes in through WM_MOUSEMOVE with whatever pointer accel Windows applied to it.
 
@@ -50,7 +50,7 @@ Some hooks to allow custom resolutions, mainly to allow DSR to work, might work 
 
 Removes the games 16:9 and 5760x2160 resolution clamps, allowing the render size to be set directly.
 
-Crosshair reticle fixed thanks to code from https://github.com/drbermejor/mgs4Ultra120, which I found after writing these and running into the same issue.
+Crosshair reticle fixed thanks to patch from https://github.com/drbermejor/mgs4Ultra120, which I found after writing these and running into the same issue.
 
 ### hooks_shadows.cpp
 
@@ -62,4 +62,4 @@ Hooks are all self-contained units, creating a new hook just involves adding a n
 
 INI settings are similarly self-contained, the top of each hook.cpp file declares the INI settings it wants to read, the declaration will handle registering the settings so it's read from INI with its value logged.
 
-spdlog used for logging, safetyhook used for hooking, ModUtils used for memory scanning and patching.
+spdlog used for logging, safetyhook used for hooking, ModUtils used for memory scanning and patching, ini-cpp for INI reading/writing.
