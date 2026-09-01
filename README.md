@@ -1,8 +1,10 @@
-Since everyone else and their mom is releasing MGS4 patches, here's another set of them.
+Since everyone and their mom is releasing MGS4 patches, here's another set of them.
 
-Allows game to make use of MSAA on geometry & transparent textures, along with a possibly-placebo rawinput mouse hook.
+Allows game to make use of MSAA on geometry & transparent textures, along with a possibly-placebo rawinput mouse hook, plus shadow resolution / game resolution overrides.
 
-Not likely to be updated, mainly releasing in hope other mods might adopt things here.
+Not that likely to be updated, mainly releasing in hope other mods might adopt things here.
+
+Test builds can be found at https://github.com/emoose/MGS4Placebo/releases - let me know if you notice any issues with it!
 
 # Patches
 
