@@ -8,11 +8,6 @@
 
 #include "settings.hpp"
 
-extern void DInput_RegisterNewDevices(); // hooks_input.cpp
-extern void SetVibration(int userId, float leftMotor, float rightMotor); // hooks_forcefeedback.cpp
-extern void AudioHooks_Update(int numUpdates); // hooks_audio.cpp
-extern void CDSwitcher_ReadIni(const std::filesystem::path& iniPath);
-
 namespace Module
 {
 	// Info about our module
@@ -62,29 +57,7 @@ namespace Module
 
 namespace Game
 {
-	enum class GamepadType
-	{
-		None,
-		PC,
-		Xbox,
-		PS,
-		Switch
-	};
-
-	inline static const char* PadTypes[] =
-	{
-		"None",
-		"PC",
-		"Xbox",
-		"PlayStation",
-		"Switch"
-	};
-
 	inline std::chrono::system_clock::time_point StartupTime;
-	inline float DeltaTime = (1.f / 60.f);
-
-	inline GamepadType CurrentPadType = GamepadType::PC;
-	inline GamepadType ForcedPadType = GamepadType::None;
 };
 
 namespace Util
