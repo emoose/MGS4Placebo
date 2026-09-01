@@ -24,7 +24,7 @@ With MSAA alone it made some difference to the scene, geometry edges have far le
 
 Tried a few attempts at enabling ATOC on them, but doesn't seem it's viable, the games HDR lighting seems to overwrite most of the data ATOC would use.
 
-Instead tried patching the shaders that draw the fences & other transparent cut-outs, switching their inputs to use per-sample interpolation. That makes D3D run the shader once per MSAA sample instead of once per pixel, so the alpha test happens per sample and the edges get antialiased the same as geometry (it's only a 4-bit field in an existing declaration so just a single byte patch, along with a checksum fixup)
+Instead tried patching the shaders that draw the fences & other transparent cut-outs, switching their inputs to use per-sample interpolation. That makes D3D run the shader once per MSAA sample instead of once per pixel, so the alpha test happens per sample and the edges get antialiased the same as geometry (it's only a 4-bit field in an existing declaration so just a single byte patch per shader, along with a checksum fixup)
 
 MSAA probably isn't that useful for those on PCs that can just run the game supersampled, but could help portables and less-powerful computers.
 
