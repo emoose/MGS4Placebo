@@ -20,13 +20,13 @@ To get around it we patch out two checks in bgfx, one that won't attach multisam
 
 ---
 
-With MSAA alone it made some difference to the scene, geometry edges have far less aliasing artifacts with it, but really geometry aliasing wasn't the main issue in the game, most of the aliasing is from transparent textures like fences that MSAA couldn't affect.
+With MSAA alone it made some difference to the scene, geometry edges have far less aliasing artifacts with it, but really geometry aliasing wasn't the main issue, most of the aliasing is from transparent textures like fences that MSAA couldn't affect.
 
 Tried a few attempts at enabling ATOC on them, but doesn't seem it's viable, the games HDR lighting seems to overwrite most of the data ATOC would use.
 
-Instead tried patching the shaders that draw the fences & other transparent cut-outs, switching their inputs to per-sample interpolation. That makes D3D run the shader once per MSAA sample instead of once per pixel, so the alpha test happens per sample and the edges get antialiased the same as geometry. It's only a 4-bit field in an existing declaration so the shader stays the same length, only the container hash needs redoing.
+Instead tried patching the shaders that draw the fences & other transparent cut-outs, switching their inputs to use per-sample interpolation. That makes D3D run the shader once per MSAA sample instead of once per pixel, so the alpha test happens per sample and the edges get antialiased the same as geometry (it's only a 4-bit field in an existing declaration so just a single byte patch, along with a checksum fixup)
 
-MSAA likely isn't too useful for those on PCs that can just run the game supersampled, but might be a help on portables and less-powerful computers.
+MSAA probably isn't that useful for those on PCs that can just run the game supersampled, but could help portables and less-powerful computers.
 
 **This has only been lightly tested in some of the first areas of the game**, already had to solve one issue with DoF, so wouldn't be surprised if later parts have their own issues too.
 
