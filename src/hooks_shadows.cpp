@@ -3,12 +3,12 @@
 
 namespace Settings
 {
-	Setting<int> ShadowBufferSize("Shadows", "BufferSize", 8192,
+	Setting<int> ShadowBufferSize("Shadows", "BufferSize", 0,
 		"Resolution of each shadow map, overriding what the config file asks "
 		"for. 0 leaves the game's own value alone.",
 		Settings::Range<int>{ 0, 16384 });
 
-	Setting<int> ShadowSampleCount("Shadows", "SampleCount", 16,
+	Setting<int> ShadowSampleCount("Shadows", "SampleCount", 0,
 		"Number of samples taken when filtering a shadow map, overriding what "
 		"the config file asks for. 0 leaves the game's own value alone.",
 		Settings::Range<int>{ 0, 256 });
