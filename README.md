@@ -10,13 +10,13 @@ Not likely to be updated, mainly releasing in hope other mods might adopt things
 
 Enables MSAA on any full-resolution render targets, also includes shader-patching code to enable multisampling on cutout textures (fences etc)
 
-Since MGS4 is forward-rendered, MSAA can be applied to it. (when Fox Engine was announced they made a big deal about switching over to deferred rendering)
+Since MGS4 is forward-rendered MSAA can be applied onto it (when Fox Engine was announced they made a big deal about switching over to deferred rendering)
 
 For this we patch full-res RTs to use bgfx's MSAA flags, and also set BGFX_STATE_MSAA so D3D would make use of it.
 
-However bgfx also refuses to attach a readable multisampled depth buffer, giving an error and bailing instead - but since shaders only read depth through R24_UNORM_X8_TYPELESS, it should be fine for a multisampled depth buffer to be used. (leaving depth write-only without changing this would break anything that reads depth, eg. DoF would just blur the whole screen)
+However bgfx also refuses to attach a readable multisampled depth buffer, giving an error and bailing instead - but since shaders only read depth through R24_UNORM_X8_TYPELESS it /should/ be fine to use. (leaving depth write-only just broke anything that tried reading depth, eg. DoF would just blur the whole screen)
 
-To get around it we patch out two checks in bgfx, one that won't attach multisampled depth to a framebuffer unless it's marked write-only, and one that gives up creating the texture at all after checking if D24S8 supports MSAA sampling.
+To get around it we patch out two checks in bgfx, one that won't attach multisampled depth to a framebuffer unless it's marked write-only, and one that gives up creating the texture at all when bgfx checks whether D24S8 supports MSAA sampling. (still unsure about why bgfx refused the second one here, seems to work with it patched at least...)
 
 ---
 
