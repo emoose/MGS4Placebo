@@ -1,0 +1,86 @@
+#pragma once
+
+// Slimmed-down version of bgfx src/config.h with only the config that affects
+// struct layouts.
+// 
+// Config values set to what MGS4 seems to be built with.
+
+#ifndef BGFX_CONFIG_MAX_DRAW_CALLS
+#	define BGFX_CONFIG_MAX_DRAW_CALLS ( (64<<10)-1)
+#endif
+
+#ifndef BGFX_CONFIG_MAX_BLIT_ITEMS
+#	define BGFX_CONFIG_MAX_BLIT_ITEMS (1<<10)
+#endif
+
+#ifndef BGFX_CONFIG_MAX_VIEWS
+#	define BGFX_CONFIG_MAX_VIEWS 512                  // upstream 256
+#endif
+
+#ifndef BGFX_CONFIG_MAX_VERTEX_LAYOUTS
+#	define BGFX_CONFIG_MAX_VERTEX_LAYOUTS 256         // upstream 64
+#endif
+
+#ifndef BGFX_CONFIG_MAX_SHADERS
+#	define BGFX_CONFIG_MAX_SHADERS 4096               // upstream 512
+#endif
+
+#ifndef BGFX_CONFIG_SORT_KEY_NUM_BITS_PROGRAM
+#	define BGFX_CONFIG_SORT_KEY_NUM_BITS_PROGRAM 10   // upstream 9
+#endif
+
+#ifndef BGFX_CONFIG_MAX_PROGRAMS
+#	define BGFX_CONFIG_MAX_PROGRAMS (1<<BGFX_CONFIG_SORT_KEY_NUM_BITS_PROGRAM)
+#endif
+
+#ifndef BGFX_CONFIG_MAX_FRAME_BUFFERS
+#	define BGFX_CONFIG_MAX_FRAME_BUFFERS 256          // upstream 128
+#endif
+
+#ifndef BGFX_CONFIG_MAX_OCCLUSION_QUERIES
+#	define BGFX_CONFIG_MAX_OCCLUSION_QUERIES 2048     // upstream 256
+#endif
+
+#ifndef BGFX_CONFIG_MAX_TEXTURES
+#	define BGFX_CONFIG_MAX_TEXTURES (4<<10)
+#endif
+
+#ifndef BGFX_CONFIG_MAX_UNIFORMS
+#	define BGFX_CONFIG_MAX_UNIFORMS 512
+#endif
+
+#ifndef BGFX_CONFIG_MAX_INDEX_BUFFERS
+#	define BGFX_CONFIG_MAX_INDEX_BUFFERS (4<<10)
+#endif
+
+#ifndef BGFX_CONFIG_MAX_VERTEX_BUFFERS
+#	define BGFX_CONFIG_MAX_VERTEX_BUFFERS (4<<10)
+#endif
+
+#ifndef BGFX_CONFIG_MAX_DYNAMIC_INDEX_BUFFERS
+#	define BGFX_CONFIG_MAX_DYNAMIC_INDEX_BUFFERS (4<<10)
+#endif
+
+#ifndef BGFX_CONFIG_MAX_DYNAMIC_VERTEX_BUFFERS
+#	define BGFX_CONFIG_MAX_DYNAMIC_VERTEX_BUFFERS (4<<10)
+#endif
+
+#ifndef BGFX_CONFIG_MAX_TEXTURE_SAMPLERS
+#	define BGFX_CONFIG_MAX_TEXTURE_SAMPLERS 16
+#endif
+
+#ifndef BGFX_CONFIG_MAX_VERTEX_STREAMS
+#	define BGFX_CONFIG_MAX_VERTEX_STREAMS 4
+#endif
+
+#ifndef BGFX_CONFIG_MAX_MATRIX_CACHE
+#	define BGFX_CONFIG_MAX_MATRIX_CACHE (BGFX_CONFIG_MAX_DRAW_CALLS+1)
+#endif
+
+#ifndef BGFX_CONFIG_MAX_RECT_CACHE
+#	define BGFX_CONFIG_MAX_RECT_CACHE (4<<10)
+#endif
+
+#ifndef BGFX_CONFIG_MAX_COLOR_PALETTE
+#	define BGFX_CONFIG_MAX_COLOR_PALETTE 16
+#endif
