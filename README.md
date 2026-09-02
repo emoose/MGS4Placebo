@@ -68,6 +68,6 @@ Hooks are all self-contained units, creating a new hook just involves adding a n
 
 INI settings are similarly self-contained, the top of each hook.cpp file declares the INI settings it wants to read, the declaration will handle registering the settings so it's read from INI with its value logged.
 
-(this style might seem odd but has been used in OutRun2006Tweaks and some other projects pretty well, made juggling 70+ different hooks/modifications a lot easier)
+(this style might seem odd but has been used in [OutRun2006Tweaks](https://github.com/emoose/OutRun2006Tweaks) and a couple other projects pretty well, made juggling 70+ separate hooks/modifications inside a single project a lot easier)
 
 spdlog used for logging, safetyhook used for hooking, ModUtils used for memory scanning and patching, ini-cpp for INI reading/writing.
