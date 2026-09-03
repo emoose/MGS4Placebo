@@ -107,6 +107,7 @@ set(mgs4placebo_SOURCES
 	"src/bgfx/config.h"
 	"src/bgfx/defines.h"
 	"src/bgfx/internal.hpp"
+	"src/bgfx/stubs.cpp"
 	"src/bgfx/tinystl/allocator.h"
 	"src/bgfx/tinystl/buffer.h"
 	"src/bgfx/tinystl/hash.h"

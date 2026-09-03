@@ -1,5 +1,6 @@
 #include "hook_mgr.hpp"
 #include "plugin.hpp"
+#include "shader_depth_msaa.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -18,6 +19,10 @@ namespace Settings
 	Setting<bool> ShaderReplace("Shaders", "Replace", false,
 		"Loads shaders from a shader_replace folder next to this DLL, by the "
 		"same filename the dump uses.");
+
+	// The depth reading shader below is only correct while the depth buffer 
+	// is multisampled, so it follows that setting rather than one of its own.
+	extern Setting<int> MsaaSamples;
 };
 
 // Every shader in the process, the game's own and the renderer's built in ones
@@ -341,7 +346,7 @@ namespace
 	std::filesystem::path ReplaceDir() { return Module::DllPath.parent_path() / "shader_replace"; }
 }
 
-class ShaderDumpHook : public Hook
+class ShaderModifyHook : public Hook
 {
 	inline static SafetyHookInline CreateShader_hook = {};
 
@@ -356,12 +361,12 @@ class ShaderDumpHook : public Hook
 		std::ofstream file(path, std::ios::binary);
 		if (!file)
 		{
-			spdlog::warn("ShaderDumpHook: could not write {}", path.string());
+			spdlog::warn("ShaderModifyHook: could not write {}", path.string());
 			return;
 		}
 
 		file.write(reinterpret_cast<const char*>(data), std::streamsize(size));
-		spdlog::debug("ShaderDumpHook: dumped {} ({} bytes, link {:08x}/{:08x})",
+		spdlog::debug("ShaderModifyHook: dumped {} ({} bytes, link {:08x}/{:08x})",
 			BlobFileName(info), size, info.linkIn, info.linkOut);
 	}
 
@@ -379,7 +384,7 @@ class ShaderDumpHook : public Hook
 		std::ifstream file(path, std::ios::binary | std::ios::ate);
 		if (!file)
 		{
-			spdlog::warn("ShaderDumpHook: could not read {}", path.string());
+			spdlog::warn("ShaderModifyHook: could not read {}", path.string());
 			return nullptr;
 		}
 
@@ -390,7 +395,7 @@ class ShaderDumpHook : public Hook
 		if (!file.read(reinterpret_cast<char*>(buffer), length))
 		{
 			delete[] buffer;
-			spdlog::warn("ShaderDumpHook: short read of {}", path.string());
+			spdlog::warn("ShaderModifyHook: short read of {}", path.string());
 			return nullptr;
 		}
 
@@ -398,12 +403,12 @@ class ShaderDumpHook : public Hook
 		if (!ReadBlobInfo(buffer, size_t(length), check))
 		{
 			delete[] buffer;
-			spdlog::error("ShaderDumpHook: {} is not a bgfx shader, ignored", path.string());
+			spdlog::error("ShaderModifyHook: {} is not a bgfx shader, ignored", path.string());
 			return nullptr;
 		}
 
 		size = uint64_t(length);
-		spdlog::info("ShaderDumpHook: replaced {} with {} bytes", BlobFileName(info), size);
+		spdlog::info("ShaderModifyHook: replaced {} with {} bytes", BlobFileName(info), size);
 		return buffer;
 	}
 
@@ -417,7 +422,7 @@ class ShaderDumpHook : public Hook
 		ShaderBlobInfo info{};
 		if (!ReadBlobInfo(memory->data, memory->size, info))
 		{
-			spdlog::warn("ShaderDumpHook: {} byte blob is not a bgfx shader", memory->size);
+			spdlog::warn("ShaderModifyHook: {} byte blob is not a bgfx shader", memory->size);
 			return CreateShader_hook.call<uint16_t*>(context, result, memory);
 		}
 
@@ -428,6 +433,15 @@ class ShaderDumpHook : public Hook
 		// there is one so that a replacement can be converted too.
 		const uint8_t* data = memory->data;
 		uint32_t size = memory->size;
+
+		// Ahead of the folder, so a shader dropped in there still wins.
+		if (Settings::MsaaSamples != 0 && info.id == DepthMsaa::kOriginalId)
+		{
+			spdlog::info("ShaderModifyHook: {} replaced with the multisampled depth read",
+				BlobFileName(info));
+			data = DepthMsaa::kBlob;
+			size = uint32_t(sizeof(DepthMsaa::kBlob));
+		}
 
 		if (Settings::ShaderReplace)
 		{
@@ -444,7 +458,7 @@ class ShaderDumpHook : public Hook
 			uint32_t convertedSize = 0;
 			if (const uint8_t* converted = MakeCutoutPerSample(data, size, convertedSize))
 			{
-				spdlog::debug("ShaderDumpHook: {} converted to run per sample", BlobFileName(info));
+				spdlog::debug("ShaderModifyHook: {} converted to run per sample", BlobFileName(info));
 				data = converted;
 				size = convertedSize;
 			}
@@ -468,12 +482,12 @@ class ShaderDumpHook : public Hook
 public:
 	std::string_view description() override
 	{
-		return "ShaderDumpHook";
+		return "ShaderModifyHook";
 	}
 
 	bool validate() override
 	{
-		return Settings::ShaderDump || Settings::ShaderReplace || Settings::ShaderPerSampleCutouts;
+		return Settings::ShaderDump || Settings::ShaderReplace || Settings::ShaderPerSampleCutouts || Settings::MsaaSamples > 0;
 	}
 
 	void declare_settings() override
@@ -496,14 +510,14 @@ public:
 			std::filesystem::create_directories(DumpDir(), ec);
 			if (ec)
 			{
-				spdlog::error("ShaderDumpHook: could not create {}: {}", DumpDir().string(), ec.message());
+				spdlog::error("ShaderModifyHook: could not create {}: {}", DumpDir().string(), ec.message());
 				return false;
 			}
-			spdlog::info("ShaderDumpHook: dumping shaders to {}", DumpDir().string());
+			spdlog::info("ShaderModifyHook: dumping shaders to {}", DumpDir().string());
 		}
 
 		if (Settings::ShaderReplace)
-			spdlog::info("ShaderDumpHook: reading replacements from {}", ReplaceDir().string());
+			spdlog::info("ShaderModifyHook: reading replacements from {}", ReplaceDir().string());
 
 		CreateShader_hook = safetyhook::create_inline(
 			Module::exe_ptr(0x75BA10), CreateShader_dest);
@@ -511,6 +525,6 @@ public:
 		return bool(CreateShader_hook);
 	}
 
-	static ShaderDumpHook instance;
+	static ShaderModifyHook instance;
 };
-ShaderDumpHook ShaderDumpHook::instance;
+ShaderModifyHook ShaderModifyHook::instance;

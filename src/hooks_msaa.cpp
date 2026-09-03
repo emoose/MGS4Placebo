@@ -28,6 +28,10 @@ namespace Settings
 	Setting<bool> MsaaLogTargets("Rendering", "MSAALogTargets", false,
 		"Logs every render target as it is created, with the flags it ends up "
 		"with.");
+
+	Setting<bool> MsaaLogPipelineSamples("Rendering", "MSAALogPipelineSamples", false,
+		"Logs the sample count each D3D12 pipeline is built with, against the "
+		"one it would have been given.");
 };
 
 // The engine keeps a table of render target descriptors and creates the bgfx
@@ -245,8 +249,9 @@ MsaaFrameBufferLogHook MsaaFrameBufferLogHook::instance;
 
 // bgfx takes Direct3D's MultisampleEnable from BGFX_STATE_MSAA, a per-draw
 // state bit the game never sets, so its triangles are rasterized with a single
-// sample per pixel no matter how many samples the render target has. The
-// rasterizer state cache reads that bit in one place:
+// sample per pixel no matter how many samples the render target has. Each
+// backend reads that bit for itself, D3D11 in its rasterizer state cache and
+// D3D12 while building a pipeline, and both extract it the same way:
 //
 //   shr rdx, 38h        ; state >> 56, BGFX_STATE_MSAA
 //   and edx, 1
@@ -275,13 +280,23 @@ public:
 
 	bool apply() override
 	{
+		// D3D11, reading the state out of rdx:
 		//   shr rdx, 38h
 		//   and edx, 1
 		if (!Module::code_matches(0x792AA1, { 0x48, 0xC1, 0xEA, 0x38, 0x83, 0xE2, 0x01 }))
 			return false;
 
+		// D3D12, out of rax:
+		//   shr rax, 38h
+		//   and eax, 1
+		if (!Module::code_matches(0x79FD14, { 0x48, 0xC1, 0xE8, 0x38, 0x83, 0xE0, 0x01 }))
+			return false;
+
 		//   mov edx, 1  followed by two nops, keeping the length the same
 		Memory::VP::Patch(Module::exe_ptr(0x792AA1), { 0xBA, 0x01, 0x00, 0x00, 0x00, 0x90, 0x90 });
+
+		//   mov eax, 1, likewise
+		Memory::VP::Patch(Module::exe_ptr(0x79FD14), { 0xB8, 0x01, 0x00, 0x00, 0x00, 0x90, 0x90 });
 
 		return true;
 	}
@@ -293,8 +308,7 @@ MsaaRasterizerHook MsaaRasterizerHook::instance;
 // bgfx refuses a framebuffer whose depth attachment is multisampled unless it is
 // write only, because it cannot resolve one: Direct3D has no resolve for depth
 // formats. Reading the target as multisampled instead needs no resolve, so the
-// check is too strict for that case, and it is the only thing standing in the
-// way of a readable multisampled depth buffer.
+// check is too strict for that case.
 //
 //   bt rcx, 27h        ; the write only flag
 //   jb  ok             ; accepted
@@ -302,6 +316,12 @@ MsaaRasterizerHook MsaaRasterizerHook::instance;
 //
 // Turning that branch into an unconditional one accepts a multisampled depth
 // attachment however it was flagged. The rest of the validation is untouched.
+//
+// That only makes the buffer available. Reading one means reading through a
+// multisampled view, which a shader built against a plain 2D texture cannot do,
+// so the pass that turns depth into the linear depth buffer the rest of the
+// frame samples has to be replaced as well. That replacement is a shader blob
+// rather than a patch, and sits with the game's own shaders.
 class MsaaDepthValidationHook : public Hook
 {
 public:
@@ -354,7 +374,6 @@ public:
 };
 MsaaDepthValidationHook MsaaDepthValidationHook::instance;
 
-
 // All three texture creation paths meet at the instruction that stores the
 // handle the renderer handed back, with the descriptor still in rbx. A failed
 // creation returns the invalid handle rather than reporting anything, and the
@@ -406,3 +425,137 @@ public:
 	static MsaaTextureResultHook instance;
 };
 MsaaTextureResultHook MsaaTextureResultHook::instance;
+
+
+// bgfx's D3D12 backend builds every pipeline with the sample count of the swap
+// chain rather than of the render targets being drawn into:
+//
+//   mov rax, [rdi+15ED0h]   ; m_scd.sampleDesc
+//   mov [rbp+1E8h], rax     ; D3D12_GRAPHICS_PIPELINE_STATE_DESC::SampleDesc
+//
+// m_scd describes the swap chain, and its sample count comes only from the
+// reset flags that ask for a multisampled back buffer, which the game does not
+// pass. A few instructions earlier the same code reads the pipeline's colour
+// and depth formats out of the framebuffer that is bound, so the sample count
+// is the one field of the three that does not follow it.
+//
+// Direct3D 12 requires a pipeline's sample count to match the views drawn with
+// it, and once a render target holds more than one sample every draw into it
+// runs against a pipeline that disagrees. What follows from that is left
+// undefined: some drivers draw it regardless, others refuse the draw or drop
+// the device. D3D11 has no pipeline object and takes the count from whichever
+// views are bound, which is why the same render targets need nothing there.
+//
+// The count that belongs there is already in the attachment's texture flags,
+// the same field MsaaHook writes, so it is read back out and put in place of
+// the loaded value. Only a pipeline that misses the cache is built, so this
+// runs once per pipeline rather than once per draw.
+namespace D3D12Renderer
+{
+	// Offsets into bgfx's RendererContextD3D12, which the pipeline builder
+	// holds in rdi.
+	constexpr size_t kFrameBufferHandle = 0x2B1E88;
+	constexpr size_t kFrameBuffers = 0x282F18;
+	constexpr size_t kTextures = 0x1E5F18;
+
+	constexpr size_t kFrameBufferStride = 192;
+	constexpr size_t kFbColour = 0x00;       // one texture handle per colour attachment
+	constexpr size_t kFbDepth = 0x10;
+	constexpr size_t kFbSwapChain = 0x18;
+	constexpr size_t kFbColourCount = 0x32;
+
+	constexpr size_t kTextureStride = 152;
+	constexpr size_t kTextureFlags = 0x70;
+
+	// The same 3 bit field the render target hook writes: 0 and 1 both mean a
+	// single sample, 2 through 5 select x2 to x16.
+	inline uint32_t SamplesFromFlags(uint64_t flags)
+	{
+		const uint32_t field = uint32_t((flags & BGFX_TEXTURE_RT_MSAA_MASK) >> BGFX_TEXTURE_RT_MSAA_SHIFT);
+		return field <= 1 ? 1 : (1u << (field - 1));
+	}
+}
+
+class MsaaPipelineSampleHook : public Hook
+{
+	inline static SafetyHookMid SampleDesc_hook = {};
+
+	static void SampleDesc_dest(safetyhook::Context& ctx)
+	{
+		const uint8_t* renderer = reinterpret_cast<const uint8_t*>(ctx.rdi);
+
+		const uint16_t fbh = *reinterpret_cast<const uint16_t*>(
+			renderer + D3D12Renderer::kFrameBufferHandle);
+
+		// Nothing bound draws to the back buffer, whose sample count is the one
+		// already loaded.
+		if (fbh == UINT16_MAX)
+			return;
+
+		const uint8_t* fb = renderer + D3D12Renderer::kFrameBuffers
+			+ size_t(fbh) * D3D12Renderer::kFrameBufferStride;
+
+		// A framebuffer wrapping a swap chain is the same case.
+		if (*reinterpret_cast<void* const*>(fb + D3D12Renderer::kFbSwapChain) != nullptr)
+			return;
+
+		// Only the colour attachments are counted, so a framebuffer with none
+		// is depth only rather than empty.
+		const uint8_t colourCount = *(fb + D3D12Renderer::kFbColourCount);
+		const uint16_t handle = colourCount > 0
+			? *reinterpret_cast<const uint16_t*>(fb + D3D12Renderer::kFbColour)
+			: *reinterpret_cast<const uint16_t*>(fb + D3D12Renderer::kFbDepth);
+
+		if (handle == UINT16_MAX)
+			return;
+
+		const uint64_t flags = *reinterpret_cast<const uint64_t*>(
+			renderer + D3D12Renderer::kTextures
+			+ size_t(handle) * D3D12Renderer::kTextureStride
+			+ D3D12Renderer::kTextureFlags);
+
+		const uint32_t samples = D3D12Renderer::SamplesFromFlags(flags);
+
+		if (Settings::MsaaLogPipelineSamples)
+		{
+			spdlog::debug("MsaaHook: framebuffer {} ({} colour) pipeline at x{}, was x{}",
+				fbh, colourCount, samples, uint32_t(ctx.rax));
+		}
+
+		// The low half of rax is the sample count and the high half the quality
+		// level, which bgfx always leaves at zero.
+		ctx.rax = samples;
+	}
+
+public:
+	std::string_view description() override
+	{
+		return "MsaaPipelineSampleHook";
+	}
+
+	bool validate() override
+	{
+		return RenderTargets::RtFieldForSamples(Settings::MsaaSamples) != 0;
+	}
+
+	bool apply() override
+	{
+		//   mov rax, [rdi+15ED0h]
+		//   mov [rbp+1E8h], rax
+		if (!Module::code_matches(0x79FFD3, { 0x48, 0x8B, 0x87, 0xD0, 0x5E, 0x01, 0x00,
+		                                      0x48, 0x89, 0x85, 0xE8, 0x01, 0x00, 0x00 }))
+			return false;
+
+		// Hooked on the store rather than the load, so the value bgfx would
+		// have used is still in rax and can be reported alongside its
+		// replacement.
+		SampleDesc_hook = safetyhook::create_mid(
+			Module::exe_ptr(0x79FFDA), SampleDesc_dest);
+
+		return bool(SampleDesc_hook);
+	}
+
+	static MsaaPipelineSampleHook instance;
+};
+MsaaPipelineSampleHook MsaaPipelineSampleHook::instance;
+

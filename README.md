@@ -18,7 +18,13 @@ For this we patch full-res RTs to use bgfx's MSAA flags, and also set BGFX_STATE
 
 However bgfx also refuses to attach a readable multisampled depth buffer, giving an error and bailing instead - but since shaders only read depth through R24_UNORM_X8_TYPELESS it /should/ be fine to use. (leaving depth write-only just broke anything that tried reading depth, eg. DoF would just blur the whole screen)
 
-To get around it we patch out two checks in bgfx, one that won't attach multisampled depth to a framebuffer unless it's marked write-only, and one that gives up creating the texture at all when bgfx checks whether D24S8 supports MSAA sampling. (still unsure about why bgfx refused the second one here, seems to work with it patched at least...)
+To get around it we patch out two checks in bgfx, one that won't attach multisampled depth to a framebuffer unless it's marked write-only, and one that gives up creating the texture at all when bgfx checks whether D24S8 supports MSAA sampling. (seems bgfx checks D24_UNORM_S8_UINT instead, which can never back an SRV anyway, so it would always say no)
+
+Shaders reading depth still declare a plain Texture2D though, which can't address a multisampled surface, so the values come back scrambled.
+
+D3D11 hands back something usable regardless, D3D12 just shows bands over anything depth-based (smoke, DoF, fog).
+
+Only one shader actually reads the depth buffer, the one linearizing it into the full-size R32_FLOAT that everything else samples, so a single replacement fixes all of it.
 
 ---
 
@@ -36,7 +42,7 @@ MSAA probably isn't that useful for those on PCs that can just run the game supe
 
 Dumps every shader the renderer makes, and can swap them out from a folder next to the dll. Hooks Context::createShader instead of the games own loader so it catches bgfx's built-in shaders too, not just the ones out of the .vfp files.
 
-The cutout patching above happens here as well.
+The MSAA cutout patching and linearizing-shader replacement mentioned above happens here as well.
 
 ### hooks_mouse.cpp
 
